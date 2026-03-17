@@ -1,135 +1,153 @@
-**
- * Gmail Auto-Delete Script — Kristy's Inbox Cleaner
- * ===================================================
- * RULES:
- *   Promotions  → delete ALL (any age)
+/**
+ * Gmail Auto-Delete Script
+ * ========================
+ * Automatically deletes inbox clutter on a weekly schedule.
+ * Fully configurable — edit the CONFIG block to match your rules.
+ *
+ * RULES (defaults):
+ *   Promotions  → delete ALL
+ *   Social      → delete ALL
+ *   Forums      → delete ALL
+ *   Newsletters → delete ALL (emails containing "unsubscribe")
  *   Purchases   → delete if older than 2 months
- *   Social      → delete ALL (any age)
  *   Updates     → delete if older than 6 months
  *   Spam        → delete if older than 1 month
- *   Forums      → delete ALL (any age)
- *   Newsletters → delete ALL (any age, contains "unsubscribe")
- *   Old condo   → delete if older than 1 year
+ *   Custom senders (e.g. building notices) → delete if older than N days
  *
- * ALWAYS PROTECTED (never deleted):
- *   Starred, Important, flight/booking/interview/tax/govt keywords
+ * ALWAYS PROTECTED:
+ *   Starred, Important, plus any keywords/domains you add to the safe lists
+ *
+ * SETUP:
+ *   1. Paste into https://script.google.com
+ *   2. Services → "+" → add Gmail API (enables permanent delete)
+ *   3. Run dryRun to preview → then runNow to delete
+ *   4. Run createWeeklyTrigger once to automate
  */
- 
+
+// ─────────────────────────────────────────────
+// CONFIGURATION — edit this block to your needs
+// ─────────────────────────────────────────────
+
 var CONFIG = {
- 
-  // --- RULES ---
-  deletePromotions:           true,   // delete ALL
-  deleteSocial:               true,   // delete ALL
-  deleteForums:               true,   // delete ALL
-  deleteNewsletters:          true,   // delete ALL (contains unsubscribe)
- 
-  deletePurchasesAfterDays:   60,     // 2 months
-  deleteUpdatesAfterDays:     180,    // 6 months
-  deleteSpamAfterDays:        30,     // 1 month
-  deleteOldCondoAfterDays:    365,    // 1 year
- 
+
+  // --- ON/OFF SWITCHES ---
+  deletePromotions:  true,   // Gmail Promotions category — delete ALL
+  deleteSocial:      true,   // Gmail Social category — delete ALL
+  deleteForums:      true,   // Gmail Forums category — delete ALL
+  deleteNewsletters: true,   // Any email containing "unsubscribe" — delete ALL
+
+  // --- AGE-BASED RULES (set to 0 to disable) ---
+  deletePurchasesAfterDays: 60,    // Purchases older than 2 months
+  deleteUpdatesAfterDays:   180,   // Updates older than 6 months
+  deleteSpamAfterDays:      30,    // Spam older than 1 month
+
+  // --- CUSTOM SENDER GROUP ---
+  // Useful for mailing lists, building portals, community notices, etc.
+  // Emails from these senders are kept if recent, deleted if older than N days
+  // Set to 0 to disable
+  deleteCustomSendersAfterDays: 365,
+
+  // Add sender domains you want age-based deletion for
+  // Examples: "your-building-portal.com", "community-list.org"
+  customSenderDomains: [
+    // "example-building-portal.com",
+    // "example-community-newsletter.org"
+  ],
+
+  // --- SAFETY CAP ---
   maxPerRun: 400,
- 
-  // --- SAFEGUARDS ---
+
+  // --- SAFEGUARDS (never deleted regardless of category) ---
+
+  // Emails containing these words in the subject are always protected
   safeSubjectKeywords: [
     "booking", "confirmation", "reservation", "itinerary",
     "flight", "ticket", "boarding", "e-ticket",
     "hotel", "check-in", "check in",
     "scanned", "scan", "document", "invoice", "receipt",
-    "statement", "tax", "t4", "t4a", "roe",
-    "password", "interview", "offer letter", "contract",
-    "verification", "security code", "one-time", "otp",
+    "statement", "tax", "password", "interview",
+    "offer letter", "contract", "verification",
+    "security code", "one-time", "otp",
     "shipment", "tracking", "order"
   ],
- 
+
+  // Emails from these sender domains are always protected
+  // Add your bank, government, employer, etc.
   safeSenderDomains: [
-    "gov.ab.ca",
-    "canada.ca",
-    "cra-arc.gc.ca",
-    "morganstanley.com"
-  ],
- 
-  condoSenderDomains: [
-    "condo-communities.com"
+    // "yourgov.ca",
+    // "yourbank.com",
+    // "youremployer.com"
   ]
+
 };
- 
+
 // ─────────────────────────────────────────────
-// MAIN — run now or via weekly trigger
+// MAIN — called manually or by weekly trigger
 // ─────────────────────────────────────────────
- 
+
 function runNow() {
   Logger.log("=== Gmail Auto-Delete starting — " + new Date() + " ===");
   var total = 0;
- 
-  // Delete ALL promotions
+
   if (CONFIG.deletePromotions) {
     total += deleteByQuery("category:promotions -is:starred -label:important", "Promotions (all)");
   }
- 
-  // Delete ALL social
+
   if (CONFIG.deleteSocial) {
     total += deleteByQuery("category:social -is:starred -label:important", "Social (all)");
   }
- 
-  // Delete ALL forums
+
   if (CONFIG.deleteForums) {
     total += deleteByQuery("category:forums -is:starred -label:important", "Forums (all)");
   }
- 
-  // Delete ALL newsletters (unsubscribe keyword, not already caught above)
+
   if (CONFIG.deleteNewsletters) {
     total += deleteByQuery(
       "unsubscribe -is:starred -label:important -category:promotions -category:social -category:forums",
       "Newsletters (all)"
     );
   }
- 
-  // Delete purchases older than 2 months
+
   if (CONFIG.deletePurchasesAfterDays > 0) {
     total += deleteByQuery(
       "category:purchases -is:starred -label:important " + olderThan(CONFIG.deletePurchasesAfterDays),
-      "Purchases (2mo+)"
+      "Purchases (" + CONFIG.deletePurchasesAfterDays + "d+)"
     );
   }
- 
-  // Delete updates older than 6 months
+
   if (CONFIG.deleteUpdatesAfterDays > 0) {
     total += deleteByQuery(
       "category:updates -is:starred -label:important " + olderThan(CONFIG.deleteUpdatesAfterDays),
-      "Updates (6mo+)"
+      "Updates (" + CONFIG.deleteUpdatesAfterDays + "d+)"
     );
   }
- 
-  // Delete spam older than 1 month (includes spam folder)
+
   if (CONFIG.deleteSpamAfterDays > 0) {
     total += deleteByQuery(
       "in:spam " + olderThan(CONFIG.deleteSpamAfterDays),
-      "Spam (1mo+)",
-      true  // includeSpamTrash = true
+      "Spam (" + CONFIG.deleteSpamAfterDays + "d+)"
     );
   }
- 
-  // Delete old condo notices
-  if (CONFIG.deleteOldCondoAfterDays > 0) {
-    total += deleteOldCondoNotices();
+
+  if (CONFIG.deleteCustomSendersAfterDays > 0 && CONFIG.customSenderDomains.length > 0) {
+    total += deleteOldCustomSenders();
   }
- 
+
   Logger.log("=== Done. Total deleted: " + total + " ===");
 }
- 
+
 // ─────────────────────────────────────────────
-// CORE DELETE FUNCTION
+// CORE DELETE
 // ─────────────────────────────────────────────
- 
-function deleteByQuery(query, label, includeSpamTrash) {
+
+function deleteByQuery(query, label) {
   Logger.log("--- " + label + " | " + query);
   var deleted = 0;
   var threads = GmailApp.search(query, 0, 100);
- 
+
   for (var i = 0; i < threads.length; i++) {
     if (deleted >= CONFIG.maxPerRun) {
-      Logger.log("  Cap reached. Continue next run.");
+      Logger.log("  Cap reached (" + CONFIG.maxPerRun + "). Remainder next run.");
       break;
     }
     if (isSafeThread(threads[i])) {
@@ -140,82 +158,88 @@ function deleteByQuery(query, label, includeSpamTrash) {
     Gmail.Users.Threads.remove("me", threads[i].getId());
     deleted++;
   }
- 
+
   Logger.log("  " + label + ": deleted " + deleted);
   return deleted;
 }
- 
-function deleteOldCondoNotices() {
+
+function deleteOldCustomSenders() {
   var deleted = 0;
-  var dateStr = formatDate(CONFIG.deleteOldCondoAfterDays);
- 
-  for (var i = 0; i < CONFIG.condoSenderDomains.length; i++) {
-    var q = "from:" + CONFIG.condoSenderDomains[i] + " before:" + dateStr + " -is:starred";
+  var dateStr = formatDate(CONFIG.deleteCustomSendersAfterDays);
+
+  for (var i = 0; i < CONFIG.customSenderDomains.length; i++) {
+    var q = "from:" + CONFIG.customSenderDomains[i] + " before:" + dateStr + " -is:starred";
+    Logger.log("--- Custom sender: " + CONFIG.customSenderDomains[i] + " before " + dateStr);
     var threads = GmailApp.search(q, 0, 100);
+
     for (var t = 0; t < threads.length; t++) {
-      if (threads[t].hasStarredMessages()) continue;
-      Logger.log("  DELETING (old condo): " + threads[t].getFirstMessageSubject());
+      if (threads[t].hasStarredMessages()) {
+        Logger.log("  PROTECTED (starred): " + threads[t].getFirstMessageSubject());
+        continue;
+      }
+      Logger.log("  DELETING: " + threads[t].getFirstMessageSubject());
       Gmail.Users.Threads.remove("me", threads[t].getId());
       deleted++;
     }
   }
- 
-  Logger.log("  Old condo notices: deleted " + deleted);
+
+  Logger.log("  Custom senders: deleted " + deleted);
   return deleted;
 }
- 
+
 // ─────────────────────────────────────────────
 // SAFEGUARD CHECK
 // ─────────────────────────────────────────────
- 
+
 function isSafeThread(thread) {
   if (thread.hasStarredMessages()) return true;
   if (thread.isImportant()) return true;
- 
+
   var subject = thread.getFirstMessageSubject().toLowerCase();
   for (var k = 0; k < CONFIG.safeSubjectKeywords.length; k++) {
     if (subject.indexOf(CONFIG.safeSubjectKeywords[k]) !== -1) return true;
   }
- 
+
   var messages = thread.getMessages();
   for (var m = 0; m < messages.length; m++) {
     var from = messages[m].getFrom().toLowerCase();
- 
+
+    // Always-safe domains
     for (var d = 0; d < CONFIG.safeSenderDomains.length; d++) {
       if (from.indexOf(CONFIG.safeSenderDomains[d]) !== -1) return true;
     }
- 
-    // Condo: safe only if recent
-    for (var c = 0; c < CONFIG.condoSenderDomains.length; c++) {
-      if (from.indexOf(CONFIG.condoSenderDomains[c]) !== -1) {
+
+    // Custom sender domains: safe only if recent
+    for (var c = 0; c < CONFIG.customSenderDomains.length; c++) {
+      if (from.indexOf(CONFIG.customSenderDomains[c]) !== -1) {
         var cutoff = new Date();
-        cutoff.setDate(cutoff.getDate() - CONFIG.deleteOldCondoAfterDays);
+        cutoff.setDate(cutoff.getDate() - CONFIG.deleteCustomSendersAfterDays);
         if (messages[m].getDate() > cutoff) return true;
       }
     }
   }
- 
+
   return false;
 }
- 
+
 // ─────────────────────────────────────────────
-// DRY RUN
+// DRY RUN — preview without deleting anything
 // ─────────────────────────────────────────────
- 
+
 function dryRun() {
   Logger.log("=== DRY RUN — nothing will be deleted ===");
   var total = 0;
- 
+
   var queries = [
-    { q: "category:promotions -is:starred -label:important",                                                          label: "Promotions (all)" },
-    { q: "category:social -is:starred -label:important",                                                              label: "Social (all)" },
-    { q: "category:forums -is:starred -label:important",                                                              label: "Forums (all)" },
-    { q: "unsubscribe -is:starred -label:important -category:promotions -category:social -category:forums",           label: "Newsletters (all)" },
-    { q: "category:purchases -is:starred -label:important " + olderThan(CONFIG.deletePurchasesAfterDays),             label: "Purchases (2mo+)" },
-    { q: "category:updates -is:starred -label:important " + olderThan(CONFIG.deleteUpdatesAfterDays),                 label: "Updates (6mo+)" },
-    { q: "in:spam " + olderThan(CONFIG.deleteSpamAfterDays),                                                          label: "Spam (1mo+)" }
+    { q: "category:promotions -is:starred -label:important",                                                        label: "Promotions (all)" },
+    { q: "category:social -is:starred -label:important",                                                            label: "Social (all)" },
+    { q: "category:forums -is:starred -label:important",                                                            label: "Forums (all)" },
+    { q: "unsubscribe -is:starred -label:important -category:promotions -category:social -category:forums",         label: "Newsletters (all)" },
+    { q: "category:purchases -is:starred -label:important " + olderThan(CONFIG.deletePurchasesAfterDays),           label: "Purchases (" + CONFIG.deletePurchasesAfterDays + "d+)" },
+    { q: "category:updates -is:starred -label:important " + olderThan(CONFIG.deleteUpdatesAfterDays),               label: "Updates (" + CONFIG.deleteUpdatesAfterDays + "d+)" },
+    { q: "in:spam " + olderThan(CONFIG.deleteSpamAfterDays),                                                        label: "Spam (" + CONFIG.deleteSpamAfterDays + "d+)" }
   ];
- 
+
   for (var i = 0; i < queries.length; i++) {
     var threads = GmailApp.search(queries[i].q, 0, 100);
     var del = 0, prot = 0;
@@ -226,24 +250,26 @@ function dryRun() {
     Logger.log("--- " + queries[i].label + ": would delete " + del + ", protect " + prot);
     total += del;
   }
- 
-  // Condo
-  var condoDateStr = formatDate(CONFIG.deleteOldCondoAfterDays);
-  for (var c = 0; c < CONFIG.condoSenderDomains.length; c++) {
-    var condoQ = "from:" + CONFIG.condoSenderDomains[c] + " before:" + condoDateStr + " -is:starred";
-    var ct = GmailApp.search(condoQ, 0, 100);
-    Logger.log("--- Old condo notices: would delete " + ct.length);
-    for (var x = 0; x < ct.length; x++) Logger.log("  [DELETE]  " + ct[x].getFirstMessageSubject());
-    total += ct.length;
+
+  // Custom senders dry run
+  if (CONFIG.deleteCustomSendersAfterDays > 0 && CONFIG.customSenderDomains.length > 0) {
+    var dateStr = formatDate(CONFIG.deleteCustomSendersAfterDays);
+    for (var c = 0; c < CONFIG.customSenderDomains.length; c++) {
+      var q = "from:" + CONFIG.customSenderDomains[c] + " before:" + dateStr + " -is:starred";
+      var ct = GmailApp.search(q, 0, 100);
+      Logger.log("--- Custom sender (" + CONFIG.customSenderDomains[c] + "): would delete " + ct.length);
+      for (var x = 0; x < ct.length; x++) Logger.log("  [DELETE]  " + ct[x].getFirstMessageSubject());
+      total += ct.length;
+    }
   }
- 
+
   Logger.log("=== Dry run complete. Would delete: " + total + " total ===");
 }
- 
+
 // ─────────────────────────────────────────────
-// WEEKLY TRIGGER — run once to set up
+// WEEKLY TRIGGER — run this once to set up
 // ─────────────────────────────────────────────
- 
+
 function createWeeklyTrigger() {
   var triggers = ScriptApp.getProjectTriggers();
   for (var i = 0; i < triggers.length; i++) {
@@ -258,15 +284,15 @@ function createWeeklyTrigger() {
     .create();
   Logger.log("Weekly trigger set: every Sunday at 10pm.");
 }
- 
+
 // ─────────────────────────────────────────────
 // HELPERS
 // ─────────────────────────────────────────────
- 
+
 function olderThan(days) {
   return "before:" + formatDate(days);
 }
- 
+
 function formatDate(daysAgo) {
   var d = new Date();
   d.setDate(d.getDate() - daysAgo);
