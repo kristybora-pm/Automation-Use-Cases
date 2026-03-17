@@ -2,7 +2,7 @@
 
 A lightweight Google Apps Script that automatically deletes inbox clutter on a weekly schedule. No agent, no LLM, no infrastructure. Just the right tool for the job.
 
-> Want the script? See [GmailAutoDelete.gs](./GmailAutoDelete.gs)
+> Want the script? See https://github.com/kristybora-pm/Automation-Use-Cases/blob/main/gmailautodelete.gs
 
 ---
 
