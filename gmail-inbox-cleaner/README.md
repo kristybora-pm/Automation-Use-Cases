@@ -158,7 +158,4 @@ Rules, safeguards, and edge cases are all welcome. Open an issue or PR if you ha
 ---
 
 ## Author
-Kristy Bora
-
-[Your Name] — Product Manager
-[LinkedIn](#) · [GitHub](#)
+Kristy Bora — Product Manager
